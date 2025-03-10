@@ -1,7 +1,9 @@
 import time
 
+from collections import Counter
 from data.classes.Board import Board
 from data.classes.Bot import Bot
+from tiebreakers import tiebreaker
 
 import importlib.util
 import os
@@ -63,7 +65,7 @@ if __name__ == "__main__":
 
     bot_names = list(name_to_module.keys())
     scorecard = {bot: 0 for bot in bot_names}
-
+    match_results = {bot: {} for bot in bot_names}
     # play the round robin
     for bot1, bot2 in generate_round_robin(bot_names):
         bot1_module = name_to_module[bot1]
@@ -87,9 +89,15 @@ if __name__ == "__main__":
                 print(f"{bot2} wins!")
                 running = False
                 scorecard[bot2] += 3
-            elif board_copy.is_in_checkmate("white"):
+                match_results[bot1][bot2] = "L"
+                match_results[bot2][bot1] = "W"
+            elif board.is_in_checkmate("white"):
                 print(f"{bot1} wins!")
                 running = False
                 scorecard[bot1] += 3
-
+                match_results[bot1][bot2] = "W"
+                match_results[bot2][bot1] = "L"
+            # add draw condition later
+    scorecard = tiebreaker(scorecard, match_results)
     print(scorecard)
+    print(match_results)
