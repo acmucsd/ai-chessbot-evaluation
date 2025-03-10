@@ -1,4 +1,5 @@
 import random
+import time
 
 
 class Bot:
@@ -12,4 +13,6 @@ class Bot:
         # pick a random move for now
         moves = self.get_possible_moves(side, board)
         move = random.choice(moves)
+        move = moves[-1]
+        time.sleep(5)
         return move

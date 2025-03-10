@@ -1,3 +1,5 @@
+import random
+import threading
 import time
 
 from collections import Counter
@@ -10,6 +12,12 @@ import os
 import copy
 import builtins
 from contextlib import contextmanager
+import signal
+import multiprocessing
+
+
+class TimeoutException(Exception):
+    pass
 
 
 @contextmanager
@@ -21,6 +29,49 @@ def override_builtins(name, new_value):
         yield  # Allow execution
     finally:
         setattr(builtins, name, original_value)  # Restore original function
+
+
+@contextmanager
+def time_limit(seconds):
+    def signal_handler(signum, frame):
+        raise TimeoutException("Timed out!")
+
+    signal.signal(signal.SIGALRM, signal_handler)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+
+
+# def run_bot_move(bot, color, board, queue):
+#     move = bot.move(color, board)
+#     queue.put(move)
+
+
+# def safe_bot_move(bot_instance, color, board_copy):
+#     # start up the queue
+#     queue = multiprocessing.Queue()
+
+#     # run the bot move in a separate process
+#     process = multiprocessing.Process(
+#         target=lambda: run_bot_move(bot_instance, color, board_copy, queue)
+#     )
+
+#     # start the process, wait our time
+#     process.start()
+#     process.join(0.1)
+
+#     # if its still alive, kill it
+#     if process.is_alive():
+#         process.terminate()
+#         process.join()
+#         move_result = random.choice(board.get_all_valid_moves(color))
+#         print("Bot timed out, making random move")
+#     else:
+#         move_result = queue.get()
+
+#     return move_result
 
 
 def generate_round_robin(bot_names):
@@ -63,10 +114,14 @@ if __name__ == "__main__":
         except ImportError as e:
             print(f"Failed to import {bot}: {e}")
 
+    # setup bot scorecards
+
     bot_names = list(name_to_module.keys())
     scorecard = {bot: 0 for bot in bot_names}
     match_results = {bot: {} for bot in bot_names}
+
     # play the round robin
+
     for bot1, bot2 in generate_round_robin(bot_names):
         bot1_module = name_to_module[bot1]
         bot2_module = name_to_module[bot2]
@@ -77,15 +132,37 @@ if __name__ == "__main__":
         running = True
 
         while running:
+            # make a move as bot
             board_copy = copy.deepcopy(board)
-            if board_copy.turn == "black":
-                m = bot1_instance.move("black", board_copy)
-                board.handle_move(m[0], m[1])
-            else:
-                m = bot2_instance.move("white", board_copy)
-                board.handle_move(m[0], m[1])
 
-            if board_copy.is_in_checkmate("black"):
+            # TODO: replace the time limit with an env variable
+            if board_copy.turn == "black":
+                # m = safe_bot_move(bot1_instance, "black", board_copy)
+                # board.handle_move(m[0], m[1])
+                # try to make the move within the time limit
+                try:
+                    with time_limit(1):
+                        m = bot1_instance.move("black", board_copy)
+                        board.handle_move(m[0], m[1])
+                except TimeoutException as e:
+                    # if run out of time, make a random move
+                    m = random.choice(board_copy.get_all_valid_moves("black"))
+                    board.handle_move(m[0], m[1])
+                    print(f"making a move for the bot {bot1}")
+            else:
+                # m = safe_bot_move(bot2_instance, "white", board_copy)
+                # board.handle_move(m[0], m[1])
+                try:
+                    with time_limit(1):
+                        m = bot2_instance.move("white", board_copy)
+                        board.handle_move(m[0], m[1])
+                except TimeoutException as e:
+                    m = random.choice(board_copy.get_all_valid_moves("white"))
+                    board.handle_move(m[0], m[1])
+                    print(f"making a move for the bot {bot2}")
+
+            # check if there is checkmate
+            if board.is_in_checkmate("black"):
                 print(f"{bot2} wins!")
                 running = False
                 scorecard[bot2] += 3
